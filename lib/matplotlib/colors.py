@@ -101,8 +101,7 @@ def _is_nth_color(c):
 
 def is_color_like(c):
     """Return whether *c* can be interpreted as an RGB(A) color."""
-    # Special-case nth color syntax because it cannot be parsed during
-    # setup.
+    # Special-case nth color syntax because it cannot be parsed during setup.
     if _is_nth_color(c):
         return True
     try:
@@ -251,21 +250,11 @@ def to_hex(c, keep_alpha=False):
 
 ### Backwards-compatible color-conversion API
 
+
 cnames = CSS4_COLORS
 hexColorPattern = re.compile(r"\A#[a-fA-F0-9]{6}\Z")
-
-
-def rgb2hex(c):
-    'Given an rgb or rgba sequence of 0-1 floats, return the hex string'
-    return to_hex(c)
-
-
-def hex2color(c):
-    """
-    Take a hex string *s* and return the corresponding rgb 3-tuple
-    Example: #efefef -> (0.93725, 0.93725, 0.93725)
-    """
-    return ColorConverter.to_rgb(c)
+rgb2hex = to_hex
+hex2color = to_rgb
 
 
 class ColorConverter(object):
@@ -327,6 +316,7 @@ class ColorConverter(object):
 
 
 colorConverter = ColorConverter()
+
 
 ### End of backwards-compatible color-conversion API
 

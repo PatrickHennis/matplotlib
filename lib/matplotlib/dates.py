@@ -96,8 +96,11 @@ Here are all the date tickers:
       <../gallery/ticks_and_spines/date_demo_rrule.html>`_.
 
     * :class:`AutoDateLocator`: On autoscale, this class picks the best
-      :class:`MultipleDateLocator` to set the view limits and the tick
-      locations.
+      :class:`RRuleLocator` to set the view limits and the tick
+      locations.  If called with ``interval_multiples=True`` it will
+      make ticks line up with sensible multiples of the tick intervals.  E.g.
+      if the interval is 4 hours, it will pick hours 0, 4, 8, etc as ticks.
+      This behaviour is not garaunteed by default.
 
 Date formatters
 ---------------
@@ -243,6 +246,27 @@ def _to_ordinalf(dt):
 _to_ordinalf_np_vectorized = np.vectorize(_to_ordinalf)
 
 
+def _dt64_to_ordinalf(d):
+    """
+    Convert `numpy.datetime64` or an ndarray of those types to Gregorian
+    date as UTC float.  Roundoff is via float64 precision.  Practically:
+    microseconds for dates between 290301 BC, 294241 AD, milliseconds for
+    larger dates (see `numpy.datetime64`).  Nanoseconds aren't possible
+    because we do times compared to ``0001-01-01T00:00:00`` (plus one day).
+    """
+
+    # the "extra" ensures that we at least allow the dynamic range out to
+    # seconds.  That should get out to +/-2e11 years.
+    extra = d - d.astype('datetime64[s]')
+    extra = extra.astype('timedelta64[ns]')
+    t0 = np.datetime64('0001-01-01T00:00:00').astype('datetime64[s]')
+    dt = (d.astype('datetime64[s]') - t0).astype(np.float64)
+    dt += extra.astype(np.float64) / 1.0e9
+    dt = dt / SEC_PER_DAY + 1.0
+
+    return dt
+
+
 def _from_ordinalf(x, tz=None):
     """
     Convert Gregorian float of the date, preserving hours, minutes,
@@ -354,12 +378,13 @@ def date2num(d):
 
     Parameters
     ----------
-    d : :class:`datetime` or sequence of :class:`datetime`
+    d : :class:`datetime` or :class:`numpy.datetime64`, or sequences of
+        these classes.
 
     Returns
     -------
     float or sequence of floats
-        Number of days (fraction part represents hours, minutes, seconds)
+        Number of days (fraction part represents hours, minutes, seconds, ms)
         since 0001-01-01 00:00:00 UTC, plus one.
 
     Notes
@@ -368,6 +393,10 @@ def date2num(d):
     Gregorian calendar is assumed; this is not universal practice.
     For details see the module docstring.
     """
+
+    if ((isinstance(d, np.ndarray) and np.issubdtype(d.dtype, np.datetime64))
+            or isinstance(d, np.datetime64)):
+        return _dt64_to_ordinalf(d)
     if not cbook.iterable(d):
         return _to_ordinalf(d)
     else:
@@ -488,8 +517,8 @@ def drange(dstart, dend, delta):
     *dend* are :class:`datetime` instances.  *delta* is a
     :class:`datetime.timedelta` instance.
     """
-    f1 = _to_ordinalf(dstart)
-    f2 = _to_ordinalf(dend)
+    f1 = date2num(dstart)
+    f2 = date2num(dend)
     step = delta.total_seconds() / SEC_PER_DAY
 
     # calculate the difference between dend and dstart in times of delta
@@ -504,7 +533,7 @@ def drange(dstart, dend, delta):
         dinterval_end -= delta
         num -= 1
 
-    f2 = _to_ordinalf(dinterval_end)  # new float-endpoint
+    f2 = date2num(dinterval_end)  # new float-endpoint
     return np.linspace(f1, f2, num + 1)
 
 ### date tickers and formatters ###
@@ -628,9 +657,10 @@ class DateFormatter(ticker.Formatter):
         return cbook.unicode_safe(s1)
 
     def strftime(self, dt, fmt=None):
-        """Refer to documentation for datetime.strftime.
+        """
+        Refer to documentation for :meth:`datetime.datetime.strftime`
 
-        *fmt* is a :func:`strftime` format string.
+        *fmt* is a :meth:`datetime.datetime.strftime` format string.
 
         Warning: For years before 1900, depending upon the current
         locale it is possible that the year displayed with %x might
@@ -1162,15 +1192,15 @@ class AutoDateLocator(DateLocator):
             else:
                 byranges[i] = self._byranges[i]
 
-            # We found what frequency to use
             break
         else:
             raise ValueError('No sensible date limit could be found in the '
                              'AutoDateLocator.')
 
-        if use_rrule_locator[i]:
+        if (freq == YEARLY) and self.interval_multiples:
+            locator = YearLocator(interval)
+        elif use_rrule_locator[i]:
             _, bymonth, bymonthday, byhour, byminute, bysecond, _ = byranges
-
             rrule = rrulewrapper(self._freq, interval=interval,
                                  dtstart=dmin, until=dmax,
                                  bymonth=bymonth, bymonthday=bymonthday,
@@ -1630,5 +1660,6 @@ class DateConverter(units.ConversionInterface):
         return None
 
 
+units.registry[np.datetime64] = DateConverter()
 units.registry[datetime.date] = DateConverter()
 units.registry[datetime.datetime] = DateConverter()
