@@ -109,6 +109,10 @@ class Line3D(lines.Line2D):
     3D line object.
     '''
 
+    self._zorig = np.asarray([])
+    self._invalidz = True
+    self._z = None
+
     def __init__(self, xs, ys, zs, *args, **kwargs):
         '''
         Keyword arguments are passed onto :func:`~matplotlib.lines.Line2D`.
@@ -136,6 +140,51 @@ class Line3D(lines.Line2D):
         self.set_data(xs, ys)
         lines.Line2D.draw(self, renderer)
         self.stale = False
+
+    def set_zdata(self, z):
+        """
+        Set the data np.array for z
+
+        ACCEPTS: 1D array
+        """
+
+        self._zorig = z
+        self._invalidz = True
+        self.stale = True
+
+    def get_zdata(self, orig=True):
+        """
+        Return the z data.
+
+        If *orig* is *True*, return the original data, else the processed data.
+        """
+        if orig:
+            return self._zorig
+        if self._invalidz:
+            self.recache()
+        return self._z
+
+    def set_data_3d(self, *args):
+        """
+        Set the x, y, and z data
+        ACCEPTS: 3D array (rows are x, y, z) or three 1D arrays
+        """
+        if len(args) == 1:
+            x, y, z = args[0]
+        else:
+            x, y, z = arguments
+
+        self.set_xdata(x)
+        self.set_ydata(y)
+        self.set_zdata(z)
+
+    def get_data_3d(self, orig=True):
+        """
+        Return the xdata, ydata, and zdata.
+
+        If *orig* is *True*, return the original data.
+        """
+        return self.get_xdata(orig=orig), self.get_ydata(orig=orig), self.get_zdata(orig=orig)
 
 
 def line_2d_to_3d(line, zs=0, zdir='z'):
